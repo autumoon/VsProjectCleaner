@@ -53,6 +53,8 @@ protected:
 
 	//配置文件参数
 	config_s m_cfg;
+	//当前正在处理的根目录对应的白名单子集（阶段 7 新增）
+	std::vector<_tstring> m_vActiveWhiteList;
 	//获取配置文件路径
 	_tstring GetIniPath(const TCHAR* szFileExt = _T(".ini"));
 
@@ -72,6 +74,9 @@ protected:
 
 	//追加一行日志并自动滚动到底部（阶段 4 新增）
 	void AppendLog(const CString& strLine);
+
+	//判断路径是否在白名单内（阶段 6 新增）
+	bool IsInWhiteList(const _tstring& stItemPath);
 
 	//执行清理（阶段 3 新增，被"拖入即清理"和"点确定"共用）
 	void RunCleanDirs(const std::vector<_tstring>& vDirs);

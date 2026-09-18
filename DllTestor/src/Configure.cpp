@@ -51,6 +51,10 @@ int ReadIniFile(const _tstring& strIniPath, config_s& _cfg)
 		strSuffixs = Ini.GetValue(INI_PRESUFFIX, INI_FILE_SUFFIXS, strSuffixs.c_str());
 		_cfg.vAllSuffixs = CStdStr::Split(strSuffixs, _T("|"));
 
+		_tstring strWhiteList = VectorToString(_cfg.vWhiteList);
+		strWhiteList = Ini.GetValue(INI_PRESUFFIX, INI_WHITELIST, strWhiteList.c_str());
+		_cfg.vWhiteList = CStdStr::Split(strWhiteList, _T("|"));
+
 		_cfg.nWindowWidth = Ini.GetLongValue(INI_PRESUFFIX, INI_WIN_WIDTH, _cfg.nWindowWidth);
 		_cfg.nWindowHeight = Ini.GetLongValue(INI_PRESUFFIX, INI_WIN_HEIGHT, _cfg.nWindowHeight);
 	}
@@ -74,6 +78,7 @@ int WriteIniFile(const _tstring& strIniPath, const config_s& _cfg)
 	Ini.SetValue(INI_PRESUFFIX, INI_ROOT_DIRS, VectorToString(_cfg.vRootDirNames).c_str());
 	Ini.SetValue(INI_PRESUFFIX, INI_ALL_DIRS, VectorToString(_cfg.vAllDirNames).c_str());
 	Ini.SetValue(INI_PRESUFFIX, INI_FILE_SUFFIXS, VectorToString(_cfg.vAllSuffixs).c_str());
+	Ini.SetValue(INI_PRESUFFIX, INI_WHITELIST, VectorToString(_cfg.vWhiteList).c_str());
 	Ini.SetLongValue(INI_PRESUFFIX, INI_WIN_WIDTH, _cfg.nWindowWidth);
 	Ini.SetLongValue(INI_PRESUFFIX, INI_WIN_HEIGHT, _cfg.nWindowHeight);
 

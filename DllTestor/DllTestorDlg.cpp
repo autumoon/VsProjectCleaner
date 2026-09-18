@@ -6,6 +6,8 @@
 #include "DllTestorDlg.h"
 #include "afxdialogex.h"
 
+#include <cwctype>
+
 /*同时支持处理文件和目录*/
 #if (defined ITEM_ONLY_DIR) && (defined ITEM_ONLY_FILE)
 #define ITEM_DIR_FILE
@@ -50,6 +52,77 @@ void CAboutDlg::DoDataExchange(CDataExchange* pDX)
 
 BEGIN_MESSAGE_MAP(CAboutDlg, CDialogEx)
 END_MESSAGE_MAP()
+
+//规范化路径用于白名单比较（阶段 6 新增）
+//  - 斜杠统一为反斜杠（/ → \）
+//  - 去尾斜杠（无论 0 个、1 个或多个）
+//  - 转小写
+//  例：
+//    "D:\prj\debug"      → "d:\prj\debug"
+//    "D:\prj\debug\"     → "d:\prj\debug"
+//    "D:\prj\debug\\"    → "d:\prj\debug"
+//    "D:/prj/debug/"     → "d:\prj\debug"
+static _tstring NormalizePathForWL(const _tstring& path)
+{
+	_tstring s = path;
+
+	// 1) 斜杠统一为反斜杠
+	for (size_t i = 0; i < s.length(); ++i)
+	{
+		if (s[i] == _T('/'))
+		{
+			s[i] = _T('\\');
+		}
+	}
+
+	// 2) 去尾斜杠（循环删，处理多个尾斜杠的情况）
+	while (!s.empty() && s[s.length() - 1] == _T('\\'))
+	{
+		s.erase(s.length() - 1);
+	}
+
+	// 3) 转小写
+	for (size_t i = 0; i < s.length(); ++i)
+	{
+		s[i] = (TCHAR)towlower(s[i]);
+	}
+
+	return s;
+}
+
+//判断白名单项与当前根目录是否相关（阶段 7 新增）
+//  输入参数 wl 和 root 必须都已通过 NormalizePathForWL 规范化
+//  相关条件（满足其一即可）：
+//    - wl == root
+//    - wl 位于 root 之下（wl 以 root + '\' 开头）
+//    - root 位于 wl 之下（root 以 wl + '\' 开头）
+//  返回 true 表示该白名单项需要参与本次比对
+static bool IsWhiteListRelevant(const _tstring& wl, const _tstring& root)
+{
+	//完全相同
+	if (wl == root)
+	{
+		return true;
+	}
+
+	//wl 位于 root 之下
+	if (wl.length() > root.length()
+		&& wl.compare(0, root.length(), root) == 0
+		&& wl[root.length()] == _T('\\'))
+	{
+		return true;
+	}
+
+	//root 位于 wl 之下
+	if (root.length() > wl.length()
+		&& root.compare(0, wl.length(), wl) == 0
+		&& root[wl.length()] == _T('\\'))
+	{
+		return true;
+	}
+
+	return false;
+}
 
 // CDllTestorDlg 对话框
 
@@ -177,8 +250,53 @@ void CDllTestorDlg::AppendLog(const CString& strLine)
 	m_logBox.LineScroll(m_logBox.GetLineCount());
 }
 
+//判断路径是否在白名单内（阶段 6 新增，阶段 7 改用预过滤子集）
+//  比对对象：m_vActiveWhiteList（已由 RunCleanDirs 按当前 root 过滤并规范化）
+//  命中条件：待删路径 == 白名单路径，或待删路径位于白名单路径之下
+//  大小写不敏感
+bool CDllTestorDlg::IsInWhiteList(const _tstring& stItemPath)
+{
+	if (m_vActiveWhiteList.empty())
+	{
+		return false;
+	}
+
+	_tstring target = NormalizePathForWL(stItemPath);
+	if (target.empty())
+	{
+		return false;
+	}
+
+	for (size_t i = 0; i < m_vActiveWhiteList.size(); ++i)
+	{
+		// m_vActiveWhiteList 里的项已规范化，直接用
+		const _tstring& white = m_vActiveWhiteList[i];
+
+		if (target == white)
+		{
+			return true;
+		}
+
+		if (target.length() > white.length()
+			&& target.compare(0, white.length(), white) == 0
+			&& target[white.length()] == _T('\\'))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 bool CDllTestorDlg::DeleteToRecycleBin(const _tstring& stItemPath, bool bRealDel /*= false*/)
 {
+	//白名单保护：命中则跳过删除（阶段 6 新增）
+	if (IsInWhiteList(stItemPath))
+	{
+		AppendLog(_T("[跳过] 白名单保护：") + CString(stItemPath.c_str()));
+		return true;
+	}
+
 	CString dir = stItemPath.c_str();
 	dir += "?";
 	dir.SetAt(dir.GetLength()-1,0);
@@ -418,6 +536,17 @@ void CDllTestorDlg::RunCleanDirs(const std::vector<_tstring>& vDirs)
 	m_cfg.vInputDirs = vAllItems;
 	WriteIniFile(GetIniPath(), m_cfg);
 
+	//预规范化白名单一次（阶段 7 新增，避免每次比对重复规范化）
+	std::vector<_tstring> vWhiteListNorm;
+	for (size_t k = 0; k < m_cfg.vWhiteList.size(); ++k)
+	{
+		_tstring n = NormalizePathForWL(m_cfg.vWhiteList[k]);
+		if (!n.empty())
+		{
+			vWhiteListNorm.push_back(n);
+		}
+	}
+
 	//开始显示进度
 	CTaskBarProgress tbp(m_hWnd);
 	CProgressInterface* ppi = &tbp;
@@ -432,6 +561,21 @@ void CDllTestorDlg::RunCleanDirs(const std::vector<_tstring>& vDirs)
 	{
 		const _tstring& stCurItem = vDirs[i];
 
+		//按当前 root 过滤白名单（阶段 7 新增）
+		//  无关项不参与本次比对，避免无意义的字符串比较
+		m_vActiveWhiteList.clear();
+		if (!vWhiteListNorm.empty())
+		{
+			_tstring rootNorm = NormalizePathForWL(stCurItem);
+			for (size_t k = 0; k < vWhiteListNorm.size(); ++k)
+			{
+				if (IsWhiteListRelevant(vWhiteListNorm[k], rootNorm))
+				{
+					m_vActiveWhiteList.push_back(vWhiteListNorm[k]);
+				}
+			}
+		}
+
 #ifdef ITEM_ONLY_DIR
 		//如果是目录
 		if (PathIsDirectory(stCurItem.c_str()))
@@ -445,6 +589,9 @@ void CDllTestorDlg::RunCleanDirs(const std::vector<_tstring>& vDirs)
 
 		ppi->SetProgressValue(i + 1, vDirs.size());
 	}
+
+	//清理激活白名单，避免影响后续调用（阶段 7 新增）
+	m_vActiveWhiteList.clear();
 
 	//结束耗时
 	int nMin = 0, nSecond = 0, nMilliSecond = 0;
@@ -607,9 +754,17 @@ BOOL CDllTestorDlg::OnInitDialog()
 
 		//INI 恢复列表后自动清理（阶段 4 同步版）
 		//注意：此处同步执行，启动时会短暂阻塞直到清理完成
-		if (!m_cfg.vInputDirs.empty())
+		//阶段 6 修复：判断"列表控件实际条目数"而非"m_cfg.vInputDirs"，
+		//             避免 INI 中路径已失效时仍触发无意义的清理
+		if (m_listItems.GetItemCount() > 0)
 		{
-			RunCleanDirs(m_cfg.vInputDirs);
+			std::vector<_tstring> vRestored;
+			for (int i = 0; i < m_listItems.GetItemCount(); ++i)
+			{
+				CString strCur = m_listItems.GetItemText(i, 0);
+				vRestored.push_back(CMfcStrFile::CString2string(strCur));
+			}
+			RunCleanDirs(vRestored);
 		}
 	}
 

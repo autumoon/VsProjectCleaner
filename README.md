@@ -123,6 +123,7 @@ INI_SRC_DIRS = E:\Path\To\Project
 INI_ROOT_DIRS = ipch|x64
 INI_ALL_DIRS = .vs|obj|Debug|Release|TestResults|MigrationBackup|.vscode|.idea
 INI_FILE_SUFFIXS = .aps|.dep|.exp|...|.VC.db
+INI_WHITELIST = D:\prj\debug|D:\prj\special\obj
 INI_WIN_WIDTH = 624
 INI_WIN_HEIGHT = 441
 ```
@@ -135,10 +136,40 @@ INI_WIN_HEIGHT = 441
 | `INI_ROOT_DIRS` | 工程根下直接删除的目录名，`\|` 分隔 |
 | `INI_ALL_DIRS` | 全树递归删除的目录名，`\|` 分隔 |
 | `INI_FILE_SUFFIXS` | 全树递归删除的文件后缀，`\|` 分隔 |
+| `INI_WHITELIST` | 白名单绝对路径，`\|` 分隔；命中则跳过删除 |
 | `INI_WIN_WIDTH` / `INI_WIN_HEIGHT` | 上次窗口尺寸 |
 
 > **自定义规则**：直接编辑 INI 文件即可，程序启动时读取。
 > 例如想保留 `.vscode` 目录，把 `INI_ALL_DIRS` 里的 `.vscode` 删掉即可。
+
+### 白名单
+
+`INI_WHITELIST` 用于保护某些目录不被清理。取值为**绝对路径**，多条用 `|` 分隔。
+
+```ini
+INI_WHITELIST = D:\prj\debug|D:\prj\special\obj
+```
+
+**命中规则**（大小写不敏感，尾斜杠兼容）：
+
+- 待清理路径 == 白名单路径
+- 待清理路径位于白名单路径之下（含所有子目录）
+
+命中的目录会被跳过删除，日志输出 `[跳过] 白名单保护：<路径>`。
+
+**示例**：
+
+| 白名单 | 待删路径 | 是否跳过 |
+|---|---|---|
+| `D:\prj\debug` | `D:\prj\debug` | ✅ 跳过 |
+| `D:\prj\debug` | `D:\prj\debug\sub\a` | ✅ 跳过 |
+| `D:\prj\debug` | `D:\prj\debug-old` | ❌ 不跳过（分隔符边界） |
+| `D:\prj\DEBUG` | `D:\prj\debug` | ✅ 跳过（大小写不敏感） |
+| `D:\prj\debug\` | `D:\prj\debug` | ✅ 跳过（尾斜杠兼容） |
+
+**注意**：白名单不做反向保护。若你拖入的根目录会整树删除某个父目录
+（如 `x64` / `ipch`），而白名单写的是它下面的子目录，则该父目录仍会被删掉。
+这种情况下你应该把父目录本身加入白名单。
 
 ---
 

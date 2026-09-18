@@ -20,6 +20,7 @@ typedef struct _config_s
 	std::vector<_tstring> vRootDirNames;
 	std::vector<_tstring> vAllDirNames;
 	std::vector<_tstring> vAllSuffixs;
+	std::vector<_tstring> vWhiteList;
 
 	_config_s()
 	{
