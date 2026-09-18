@@ -97,6 +97,8 @@ protected:
 
 	// 生成的消息映射函数
 	virtual BOOL OnInitDialog();
+	//支持日志框 Ctrl+A 全选（阶段 5 新增）
+	virtual BOOL PreTranslateMessage(MSG* pMsg);
 	afx_msg void OnSysCommand(UINT nID, LPARAM lParam);
 	afx_msg void OnPaint();
 	afx_msg HCURSOR OnQueryDragIcon();

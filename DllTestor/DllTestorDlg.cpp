@@ -142,7 +142,7 @@ int CDllTestorDlg::AddItemToList(_tstring stItemPath)
 	return m_listItems.GetItemCount();
 }
 
-//追加一行日志并自动滚动到底部（阶段 4 新增）
+//追加一行日志并自动滚动到底部（阶段 4 新增，阶段 5 加行数限制）
 void CDllTestorDlg::AppendLog(const CString& strLine)
 {
 	if (m_logBox.GetSafeHwnd() == NULL)
@@ -158,6 +158,20 @@ void CDllTestorDlg::AppendLog(const CString& strLine)
 	int nLen = m_logBox.GetWindowTextLength();
 	m_logBox.SetSel(nLen, nLen);
 	m_logBox.ReplaceSel(strText);
+
+	//日志最多保留 1000 行，超出则从头部丢弃最旧的行（阶段 5 新增）
+	const int nMaxLines = 1000;
+	int nLineCount = m_logBox.GetLineCount();
+	if (nLineCount > nMaxLines)
+	{
+		int nRemoveLines = nLineCount - nMaxLines;
+		int nCharPos = m_logBox.LineIndex(nRemoveLines);
+		if (nCharPos > 0)
+		{
+			m_logBox.SetSel(0, nCharPos);
+			m_logBox.ReplaceSel(_T(""));
+		}
+	}
 
 	//滚动到底部
 	m_logBox.LineScroll(m_logBox.GetLineCount());
@@ -487,6 +501,24 @@ BEGIN_MESSAGE_MAP(CDllTestorDlg, CDialogEx)
 
 
 // CDllTestorDlg 消息处理程序
+
+//支持日志框 Ctrl+A 全选（阶段 5 新增）
+BOOL CDllTestorDlg::PreTranslateMessage(MSG* pMsg)
+{
+	//仅当焦点在日志框、按下 Ctrl+A 时接管
+	if (pMsg->message == WM_KEYDOWN
+		&& (pMsg->wParam == 'A' || pMsg->wParam == 'a')
+		&& (::GetKeyState(VK_CONTROL) & 0x8000))
+	{
+		if (::GetFocus() == m_logBox.GetSafeHwnd())
+		{
+			m_logBox.SetSel(0, -1);
+			return TRUE;  //已处理，不再传递
+		}
+	}
+
+	return CDialogEx::PreTranslateMessage(pMsg);
+}
 
 BOOL CDllTestorDlg::OnInitDialog()
 {
@@ -886,6 +918,12 @@ void CDllTestorDlg::OnBnClickedButtonClearItems()
 	if (m_listItems.GetItemCount())
 	{
 		m_listItems.DeleteAllItems();
+	}
+
+	//同步清空日志（阶段 5 新增）
+	if (m_logBox.GetSafeHwnd() != NULL)
+	{
+		m_logBox.SetWindowText(_T(""));
 	}
 }
 
