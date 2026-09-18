@@ -170,6 +170,7 @@ bool CDllTestorDlg::DeleteToRecycleBin(const _tstring& stItemPath, bool bRealDel
 	dir.SetAt(dir.GetLength()-1,0);
 
 	SHFILEOPSTRUCT drive;
+	ZeroMemory(&drive, sizeof(drive));
 	drive.hwnd = this->m_hWnd; // ウィンドウハンドル
 	drive.wFunc = FO_DELETE; // 実行する操作
 	drive.pFrom = dir; // 対象ファイル名
@@ -186,18 +187,31 @@ bool CDllTestorDlg::DeleteToRecycleBin(const _tstring& stItemPath, bool bRealDel
 
 	drive.fFlags = flags;
 
-	SHFileOperation(&drive);
+	int nRet = SHFileOperation(&drive);
 
-	if (bRealDel)
+	//成功条件：返回 0 且用户未中止
+	bool bOk = (nRet == 0) && (drive.fAnyOperationsAborted == FALSE);
+
+	if (bOk)
 	{
-		AppendLog(_T("已删除：") + CString(stItemPath.c_str()));
+		if (bRealDel)
+		{
+			AppendLog(_T("已删除：") + CString(stItemPath.c_str()));
+		}
+		else
+		{
+			AppendLog(_T("已移动到回收站：") + CString(stItemPath.c_str()));
+		}
 	}
 	else
 	{
-		AppendLog(_T("已移动到回收站：") + CString(stItemPath.c_str()));
+		CString strErr;
+		strErr.Format(_T("[失败] 无法删除（可能被占用，错误码 %d）：%s"),
+			nRet, CString(stItemPath.c_str()));
+		AppendLog(strErr);
 	}
 
-	return true;
+	return bOk;
 }
 
 int CDllTestorDlg::ProcessDir(const _tstring& stSrcPath, const _tstring& stDstPath, config_s& _cfg)
